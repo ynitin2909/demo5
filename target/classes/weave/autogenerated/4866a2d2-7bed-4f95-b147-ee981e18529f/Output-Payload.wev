@@ -1,0 +1,6 @@
+%dw 2.0
+
+type auto_4866a2d2_7bed_4f95_b147_ee981e18529f_Output_Payload = Array<{|  F_name: String,   column_1: String|}> {"isQuotedString": "false",
+"header": "true",
+"headerLineNumber": "0"}
+

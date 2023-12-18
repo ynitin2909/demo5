@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="5f102b7d-8b70-42f3-a94c-e0335c5708ef" >
+		<http:listener-connection host="localhost" port="8081" />
+	</http:listener-config>
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="0bb5cdd2-c3c9-49fd-85e0-0756053a10e5" >
+		<salesforce:basic-connection username="tcpksol@company.sandbox" password="qwe!@#123" securityToken="mp9JIqMeFvEnrtMuq2NGey9u" />
+	</salesforce:sfdc-config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="cab8b618-5263-4ba9-b6e3-4d098655bd73" >
+		<db:my-sql-connection host="localhost" port="3306" user="root" password="root1234" />
+	</db:config>
+	<ee:object-store-caching-strategy name="Caching_Strategy" doc:name="Caching Strategy" doc:id="cb9e9a7f-77fb-48e2-81bd-91bf6df9990b" keyGenerationExpression="#[attributes.queryParams.emp_id]">
+		<os:private-object-store maxEntries="10" entryTtl="1" entryTtlUnit="HOURS" expirationInterval="5" />
+	</ee:object-store-caching-strategy>
+	<configuration doc:name="Configuration" doc:id="a970f524-bdd7-42f6-90aa-b1bcf2617ffc" defaultErrorHandler-ref="demo5Error_Handler" />
+	<flow name="file_write" doc:id="4866a2d2-7bed-4f95-b147-ee981e18529f" >
+		<ee:transform doc:name="Transform Message" doc:id="dd93ea7a-7f54-4bfa-b797-84315e9ca397">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/csv
+---
+payload map ( payload01 , indexOfPayload01 ) -> {
+	F_name: payload01.first_name,
+	column_1: payload01.last_name
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="61c1bc44-ac61-48a0-826f-fbba68703ad2" message="#[10/0]"/>
+		<try doc:name="Try" doc:id="e3a52dd0-e54c-4eed-a850-6ebd79d44477" >
+			<logger level="INFO" doc:name="Logger" doc:id="b4818fea-9f9f-4c2d-a250-ab39a2268abc" message="#[10/0]"/>
+			<logger level="INFO" doc:name="Logger" doc:id="1ed03fe5-4d17-46c7-b89a-4ff4e4aade63" />
+		</try>
+		<until-successful maxRetries="5" doc:name="Until Successful" doc:id="e56b0b3a-8965-4623-80ea-8bcc6917c1ba" >
+			<file:write doc:name="Write" doc:id="d754425b-314f-4bee-a01b-8be850b8a624" path="demo5.csv" />
+		</until-successful>
+		<error-handler>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="fe1999e3-963e-4c6e-ba63-d40210687555" type="ANY">
+				<logger level="INFO" doc:name="Logger" doc:id="fe413037-f6a4-4aad-823e-67b0b55f8062" />
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="salesforce_upsert" doc:id="ef1376c4-8c02-4934-8943-504fa3198230" >
+		<ee:transform doc:name="Transform Message" doc:id="8e2a3f95-2ba0-485b-ad2e-6750c3b89c60">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+payload map ( payload01 , indexOfPayload01 ) -> {
+	Name: payload01.first_name
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce:upsert objectType="Customer" externalIdFieldName="Name" doc:name="Upsert" doc:id="8842ee27-3d9a-4988-8aae-0ccfd3a55804" config-ref="Salesforce_Config" />
+	</flow>
+	<sub-flow name="data_insert" doc:id="09d9ecac-4ab6-4080-9521-8106a241073d" >
+		<ee:transform doc:name="Transform Message" doc:id="f55827a0-c7e4-44cb-93aa-475f37446b7b">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+payload map ( payload01 , indexOfPayload01 ) -> {
+	demo3_col5: payload01.ip_address,
+	demo3_col1: payload01.gender,
+	demo3_col2: payload01.first_name,
+	demo3_col3: payload01.last_name,
+	demo3_col4: payload01.email,
+	idnew_table: payload01.id as String
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<first-successful doc:name="First Successful" doc:id="c268d645-b830-4688-b6e1-c7095f42ee9b" >
+			<route >
+				<logger level="INFO" doc:name="Logger_salesforce" doc:id="348103fb-084b-4566-b2f1-31085a13e47e" message="#[10/0]"/>
+			</route>
+			<route >
+				<logger level="INFO" doc:name="Logger_jms" doc:id="6f639aae-8dd7-4b3f-8bb7-bab75919be48" message="#[10/0]"/>
+			</route>
+			<route >
+				<db:bulk-insert doc:name="Bulk insert" doc:id="c429b897-bad6-4598-bb1e-e866ecfe151e" config-ref="Database_Config">
+			<db:sql><![CDATA[INSERT INTO `demo_3`.`demo_3`
+(`idnew_table`,
+`demo3_col1`,
+`demo3_col2`,
+`demo3_col3`,
+`demo3_col4`,
+`demo3_col5`)
+VALUES
+(:idnew_table,:demo3_col1,:demo3_col2,:demo3_col3,:demo3_col4,:demo3_col5);]]></db:sql>
+		</db:bulk-insert>
+			</route>
+		</first-successful>
+		<logger level="INFO" doc:name="Logger" doc:id="6d78d5c9-53d7-46ee-8d54-f62dc0596e72" />
+	</sub-flow>
+	<flow name="demo_project3Flow" doc:id="fed380dd-f26d-4768-9025-67c2918ae37d" >
+		<http:listener doc:name="Listener" doc:id="35493fcf-f0e0-411e-891e-6e141953991e" config-ref="HTTP_Listener_config" path="/demo3"/>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="5369dcf9-0033-46ed-bc15-46ef9d5a7ae3" variableName="demo3_input"/>
+		<scatter-gather doc:name="Scatter-Gather" doc:id="34561e8c-0f29-47eb-9b1e-db4b56f59d22" >
+			<route >
+				<ee:cache doc:name="Cache" doc:id="592f4554-90e6-4268-ae86-a29d6ec83eec" cachingStrategy-ref="Caching_Strategy">
+			<flow-ref doc:name="Flow Reference" doc:id="27abbf65-e05d-4b72-b7fe-60b296a23d34" name="data_insert" />
+			<set-payload value="#[vars.demo3_input]" doc:name="Set Payload" doc:id="61b55791-1c41-45b5-9717-66586cad7261" />
+			<flow-ref doc:name="Flow Reference" doc:id="9da991f5-7d7d-46bb-a16e-057387557d6b" name="salesforce_upsert" />
+		</ee:cache>
+				<ee:transform doc:name="Transform Message" doc:id="262a794f-2871-4d49-897e-ef6163c35d86" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+[{"id":1,"first_name":"Mason"},
+{"id":2,"first_name":"Barbabas"},
+{"id":3,"first_name":"Andie"},
+{"id":4,"first_name":"Riannon"},
+]]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</route>
+			<route >
+				<set-payload value="#[vars.demo3_input]" doc:name="Set Payload" doc:id="35728abf-9e6a-4c16-aceb-cea3bb11c104" />
+				<flow-ref doc:name="Flow Reference" doc:id="d250c996-0d79-4d2b-9ad2-188f4673f73a" name="file_write" />
+				<ee:transform doc:name="Transform Message" doc:id="9529d26b-2a94-4cde-87a4-619f7393cbbc" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+[{"id":1,"last_name":"Mason"},
+{"id":2,"last_name":"Barbabas"},
+{"id":3,"last_name":"Andie"},
+{"id":4,"last_name":"Riannon"},
+]]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<try doc:name="Try" doc:id="12ddb387-0ff9-472a-9b13-c3c115028b4f" >
+					<logger level="INFO" doc:name="Logger" doc:id="eb340f1f-2bed-4d9d-be7c-625a8984ae63" message="#[10/0]" />
+					<error-handler >
+						<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="646bf445-ef90-47a8-b8f8-512980e684da" />
+					</error-handler>
+				</try>
+			</route>
+		</scatter-gather>
+		<logger level="INFO" doc:name="Logger" doc:id="187428fd-fe27-4e9a-9140-0547bee5d631" message="Hello mule"/>
+		<ee:transform doc:name="Transform Message" doc:id="133849bc-6896-466f-a229-89873dc6b078" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload[0].typedValue]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<raise-error doc:name="Raise error" doc:id="a941f240-f485-4507-a671-c26d0aa8ced6" type="FUNDS_ISSUE:MAINTAIN_HIGHER_FUNDS" description="insufficient funds" />
+		<logger level="INFO" doc:name="Logger" doc:id="8bcc304f-a3e5-452a-9786-37ec758fa8c0" />
+	</flow>
+	<flow name="demo5Flow" doc:id="3e0cb22a-4c68-445d-9dba-c9f049e8e786" >
+		<http:listener doc:name="Listener" doc:id="804b904e-c2f6-44a9-abd6-3651c16859df" config-ref="HTTP_Listener_config" path="/salesforce"/>
+		<ee:transform doc:name="Transform Message" doc:id="4cd7b759-acf5-4113-8df0-b4fd2dbb7faa" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload.dataset.*record map ( record , indexOfRecord ) -> {
+	id: record.id default 0,
+	first_name: record.last_name default "",
+	last_name: record.last_name default "",
+	email: record.email default "",
+	gender: record.gender default "",
+	ip_address: record.ip_address default ""
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<flow-ref doc:name="Flow Reference" doc:id="669ea582-f774-4c58-875f-edc49247ab67" name="salesforce_upsert"/>
+	</flow>
+	<error-handler name="demo5Error_Handler" doc:id="1f85fa1e-4a9e-492f-8eed-035060893f77" >
+		<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="44d0339d-ddc4-4e78-837e-5eb7b65592da" type="EXPRESSION">
+			<logger level="INFO" doc:name="Logger" doc:id="1328b324-51c7-49cd-8158-dab3500c63d9" />
+		</on-error-continue>
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="b65f751a-1de8-46b3-aad1-28b5975653b8" type="STREAM_MAXIMUM_SIZE_EXCEEDED">
+			<logger level="INFO" doc:name="Logger" doc:id="ef4c0d23-1390-4f7b-8a70-8f2bc0c59c1b" />
+		</on-error-propagate>
+	</error-handler>
+</mule>
